@@ -218,11 +218,11 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Generated project data and charts
-data/raw/*
-data/interim/*
-data/processed/*
-visuals/*
-!data/raw/.gitkeep
-!data/interim/.gitkeep
-!data/processed/.gitkeep
-!visuals/.gitkeep
+# data/raw/*
+# data/interim/*
+# # data/processed/*
+# visuals/*
+# !data/raw/.gitkeep
+# !data/interim/.gitkeep
+# !data/processed/.gitkeep
+# !visuals/.gitkeep
