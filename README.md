@@ -32,6 +32,20 @@ requests through residential IP pools at 10 credits per request if datacenter
 requests get blocked. You can also fetch directly without a proxy with
 `--no-proxy`. Direct requests may be blocked or rate-limited.
 
+Many LAPD critical incident videos are age-restricted, and YouTube only serves
+their captions to logged-in sessions. To fetch those transcripts, sign in to
+YouTube in a browser and pass that browser's name so yt-dlp can reuse its
+session cookies:
+
+```sh
+lapd-shootings fetch-transcripts --cookies-from-browser chrome
+```
+
+These requests go directly to YouTube from your IP, not through the proxy.
+Automated fetching with account cookies can violate YouTube's terms of
+service and may put the account at risk, so consider a secondary account. On
+macOS, reading Chrome cookies triggers a keychain permission prompt.
+
 ## Usage
 
 Run every stage:

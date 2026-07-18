@@ -12,7 +12,7 @@ import pandas as pd
 from .config import ProjectPaths
 from .parse import parse_cases, summarize_by_year
 from .storage import read_json, write_json
-from .transcripts import fetch_transcripts, transcript_client
+from .transcripts import fetch_age_restricted, fetch_transcripts, transcript_client
 from .visualize import save_annual_chart
 from .youtube import fetch_uploads, filter_ois_videos, require_youtube_key
 
@@ -96,6 +96,14 @@ def _add_transcript_options(parser: argparse.ArgumentParser) -> None:
         default=120.0,
         help="Seconds before an unresponsive transcript request is abandoned.",
     )
+    parser.add_argument(
+        "--cookies-from-browser",
+        metavar="BROWSER",
+        help=(
+            "Retry age-restricted videos with yt-dlp, using the YouTube login "
+            "session from this browser (chrome, safari, firefox, ...)."
+        ),
+    )
 
 
 def run_fetch_videos(paths: ProjectPaths, limit: int | None = None) -> None:
@@ -127,6 +135,27 @@ def run_fetch_transcripts(args: argparse.Namespace, paths: ProjectPaths) -> None
         sleep_seconds=args.delay,
         retry_delay=args.retry_delay,
     )
+    if args.cookies_from_browser:
+        age_restricted = [
+            video["video_id"]
+            for video in videos
+            if str(cache.get(video["video_id"], {}).get("error", "")).startswith(
+                ("AgeRestricted", "yt-dlp: ERROR", "yt-dlp: HTTP")
+            )
+        ]
+        if age_restricted:
+            print(
+                f"Retrying {len(age_restricted)} age-restricted videos with "
+                f"{args.cookies_from_browser} cookies"
+            )
+            fetch_age_restricted(
+                age_restricted,
+                cache,
+                str(paths.transcripts),
+                browser=args.cookies_from_browser,
+                sleep_seconds=max(args.delay, 5.0),
+            )
+
     fetched = sum(record.get("status") == "fetched" for record in cache.values())
     deferred = sum(record.get("status") == "retryable" for record in cache.values())
     print(f"Cached {fetched} fetched transcripts for {len(videos)} OIS videos.")

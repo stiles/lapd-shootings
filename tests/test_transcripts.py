@@ -3,7 +3,7 @@ from pathlib import Path
 from requests.exceptions import ProxyError
 
 from lapd_shootings.storage import read_json
-from lapd_shootings.transcripts import fetch_transcripts
+from lapd_shootings.transcripts import fetch_transcripts, json3_to_text
 
 
 class FakeTranscript:
@@ -54,6 +54,18 @@ def test_fetch_transcripts_resumes_and_persists_cache(tmp_path: Path) -> None:
     assert result["new"]["status"] == "fetched"
     assert result["new"]["text"] == "Transcript for new"
     assert read_json(cache_path, {}) == result
+
+
+def test_json3_to_text_flattens_caption_events() -> None:
+    payload = {
+        "events": [
+            {"segs": [{"utf8": "Hello, my name is"}, {"utf8": " Captain"}]},
+            {"segs": [{"utf8": "\n"}]},
+            {"aAppend": 1},
+            {"segs": [{"utf8": "Kelly Monise."}]},
+        ]
+    }
+    assert json3_to_text(payload) == "Hello, my name is Captain Kelly Monise."
 
 
 def test_fetch_transcripts_defers_network_failures_until_next_command(
