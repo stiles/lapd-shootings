@@ -13,6 +13,70 @@ CASE_NUMBER_PATTERN = re.compile(r"\(([A-Z]{2,3}[\s-]?\d+[-–]\d{2})\)")
 INCIDENT_DATE_PATTERN = re.compile(r"(\d{1,2}/\d{1,2}/\d{2,4})")
 DEFAULT_PATTERNS = {"ghost_gun": r"ghost[\s-]?gun"}
 
+# The 21 LAPD geographic patrol divisions plus Metropolitan Division, keyed by
+# canonical name. Aliases include abbreviations and auto-caption misspellings
+# seen in transcripts, e.g. "Hollandbeck" for Hollenbeck.
+DIVISIONS = {
+    "77th Street": ["77th street", "77 street", "77th st", "77th"],
+    "Central": ["central"],
+    "Devonshire": ["devonshire"],
+    "Foothill": ["foothill"],
+    "Harbor": ["harbor"],
+    "Hollenbeck": ["hollenbeck", "hollandbeck", "hollenbach"],
+    "Hollywood": ["hollywood"],
+    "Metropolitan": ["metropolitan"],
+    "Mission": ["mission"],
+    "Newton": ["newton"],
+    "North Hollywood": ["north hollywood"],
+    "Northeast": ["northeast"],
+    "Olympic": ["olympic"],
+    "Pacific": ["pacific"],
+    "Rampart": ["rampart"],
+    "Southeast": ["southeast"],
+    "Southwest": ["southwest"],
+    "Topanga": ["topanga"],
+    "Van Nuys": ["van nuys"],
+    "West Los Angeles": ["west los angeles", "west la", "wla"],
+    "West Valley": ["west valley"],
+    "Wilshire": ["wilshire"],
+}
+
+_CANONICAL_BY_ALIAS = {
+    alias: canonical for canonical, aliases in DIVISIONS.items() for alias in aliases
+}
+# Longest aliases first, so "North Hollywood" wins over "Hollywood".
+_ALIAS_ALTERNATION = "|".join(
+    re.escape(alias) for alias in sorted(_CANONICAL_BY_ALIAS, key=len, reverse=True)
+)
+_ALIAS_PATTERN = re.compile(rf"\b({_ALIAS_ALTERNATION})\b", re.IGNORECASE)
+# Transcript mentions must be anchored to "Division"/"Area" to avoid matching
+# ordinary words like "mission" or "central". Allows conjunction lists such as
+# "Hollenbeck and Newton divisions".
+_MENTION_PATTERN = re.compile(
+    rf"\b((?:{_ALIAS_ALTERNATION})(?:\s*(?:,|and|&)\s*(?:{_ALIAS_ALTERNATION}))*)"
+    r"\s+(?:patrol\s+)?(?:divisions?|areas?)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_title_division(title: str) -> str | None:
+    """Return the canonical division named in an OIS title, if any."""
+    match = _ALIAS_PATTERN.search(title)
+    if not match:
+        return None
+    return _CANONICAL_BY_ALIAS[match.group(1).lower()]
+
+
+def find_divisions(text: str) -> list[str]:
+    """Return canonical divisions mentioned as "X Division"/"X Area" in text."""
+    found: list[str] = []
+    for mention in _MENTION_PATTERN.finditer(text):
+        for alias in _ALIAS_PATTERN.findall(mention.group(1)):
+            canonical = _CANONICAL_BY_ALIAS[alias.lower()]
+            if canonical not in found:
+                found.append(canonical)
+    return found
+
 
 def parse_incident_date(title: str) -> str | None:
     """Extract an ISO date from an OIS title when one is present."""
@@ -52,6 +116,17 @@ def parse_cases(
         lambda record: record.get("error")
     )
     frame["has_transcript"] = frame["transcript_status"].eq("fetched")
+
+    # Prefer the division named in the title; fall back to the first division
+    # mentioned in the transcript. Keep every transcript mention as a list,
+    # since some incidents involve officers from multiple divisions.
+    frame["title_division"] = frame["title"].map(parse_title_division)
+    frame["transcript_divisions"] = frame["transcript"].map(
+        lambda text: find_divisions(text) if isinstance(text, str) else []
+    )
+    frame["division"] = frame["title_division"].fillna(
+        frame["transcript_divisions"].map(lambda found: found[0] if found else None)
+    )
 
     incident_year = pd.to_datetime(frame["incident_date"], errors="coerce").dt.year
     upload_year = pd.to_datetime(frame["published_at"], errors="coerce").dt.year

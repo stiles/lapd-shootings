@@ -1,10 +1,42 @@
-from lapd_shootings.parse import parse_cases, parse_incident_date, summarize_by_year
+from lapd_shootings.parse import (
+    find_divisions,
+    parse_cases,
+    parse_incident_date,
+    parse_title_division,
+    summarize_by_year,
+)
 
 
 def test_parse_incident_date_accepts_two_and_four_digit_years() -> None:
     assert parse_incident_date("Newton OIS 6/9/2026") == "2026-06-09"
     assert parse_incident_date("Newton OIS 6/13/26") == "2026-06-13"
     assert parse_incident_date("Newton OIS") is None
+
+
+def test_parse_title_division_reads_leading_area() -> None:
+    assert parse_title_division("Hollenbeck Area (Newton) OIS 6/9/2026") == "Hollenbeck"
+    assert parse_title_division("77th Area OIS 1/2/24 (NRF001-24)") == "77th Street"
+    assert parse_title_division("North Hollywood Division OIS") == "North Hollywood"
+    assert parse_title_division("WLA Division (SWAT) OIS") == "West Los Angeles"
+    assert parse_title_division("Off-Duty LAPD OIS") is None
+
+
+def test_find_divisions_handles_narration_and_caption_errors() -> None:
+    assert find_divisions(
+        "involved shooting that occurred in the city of Los Angeles involving "
+        "officers from both Hollandbeck and Newton divisions"
+    ) == ["Hollenbeck", "Newton"]
+    assert find_divisions(
+        "officer-involved shooting that occurred in Pacific Division in the city"
+    ) == ["Pacific"]
+    assert find_divisions(
+        "shooting that occurred in 77 Street Division in the city of Los Angeles"
+    ) == ["77th Street"]
+    assert find_divisions(
+        "at around 12:45 p.m., Mission Patrol Division officers responded"
+    ) == ["Mission"]
+    # Plain words should not match without a Division/Area anchor.
+    assert find_divisions("officers responded to the central mission district") == []
 
 
 def test_parse_cases_extracts_metadata_and_transcript_findings() -> None:

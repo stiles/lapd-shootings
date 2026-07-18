@@ -17,6 +17,8 @@ from youtube_transcript_api import (
     CouldNotRetrieveTranscript,
     IpBlocked,
     RequestBlocked,
+    VideoUnplayable,
+    YouTubeDataUnparsable,
     YouTubeTranscriptApi,
 )
 
@@ -110,6 +112,10 @@ def fetch_transcripts(
             except (Timeout, ChunkedEncodingError) as error:
                 # The proxy sometimes stalls on a single request; the next
                 # attempt usually goes through, so retry within this run.
+                cache[video_id] = _retryable_record(error, previous_attempts)
+            except (VideoUnplayable, YouTubeDataUnparsable) as error:
+                # The proxy occasionally serves a garbled watch page that
+                # looks like an unplayable video; treat it as transient.
                 cache[video_id] = _retryable_record(error, previous_attempts)
             except (RequestException, IncompleteRead, OSError) as error:
                 cache[video_id] = _retryable_record(error, previous_attempts)
