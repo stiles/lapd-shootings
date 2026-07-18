@@ -68,6 +68,11 @@ def _add_transcript_options(parser: argparse.ArgumentParser) -> None:
         help="Fetch directly instead of using the ScrapeOps proxy.",
     )
     parser.add_argument(
+        "--residential",
+        action="store_true",
+        help="Route proxy requests through residential IP pools (10 credits each).",
+    )
+    parser.add_argument(
         "--passes", type=int, default=5, help="Maximum passes for blocked videos."
     )
     parser.add_argument(
@@ -78,6 +83,18 @@ def _add_transcript_options(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=1.0,
         help="Seconds to wait after each transcript request.",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=5.0,
+        help="Initial seconds to wait before retrying transient request failures.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="Seconds before an unresponsive transcript request is abandoned.",
     )
 
 
@@ -100,13 +117,24 @@ def run_fetch_transcripts(args: argparse.Namespace, paths: ProjectPaths) -> None
         (video["video_id"] for video in videos),
         cache,
         str(paths.transcripts),
-        client=transcript_client(use_proxy=not args.no_proxy),
+        client=transcript_client(
+            use_proxy=not args.no_proxy,
+            residential=args.residential,
+            timeout=args.timeout,
+        ),
         passes=args.passes,
         batch_size=args.batch_size,
         sleep_seconds=args.delay,
+        retry_delay=args.retry_delay,
     )
     fetched = sum(record.get("status") == "fetched" for record in cache.values())
+    deferred = sum(record.get("status") == "retryable" for record in cache.values())
     print(f"Cached {fetched} fetched transcripts for {len(videos)} OIS videos.")
+    if deferred:
+        print(
+            f"Deferred {deferred} transient network or blocking failures. "
+            "Run this command again after the proxy recovers."
+        )
 
 
 def run_parse(paths: ProjectPaths) -> None:

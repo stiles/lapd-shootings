@@ -20,15 +20,17 @@ Set a YouTube Data API key:
 export YOUTUBE_KEY="your-key"
 ```
 
-Transcript fetching uses a ScrapeOps residential proxy by default because
-YouTube can block repeated caption requests. Set its key before fetching:
+Transcript fetching uses the ScrapeOps proxy port by default because YouTube
+can block repeated caption requests. Set its key before fetching:
 
 ```sh
 export SCRAPE_PROXY_KEY="your-key"
 ```
 
-You can fetch directly without a proxy with `--no-proxy`. Direct requests may
-be blocked or rate-limited.
+Datacenter proxies cost 1 API credit per request. Add `--residential` to route
+requests through residential IP pools at 10 credits per request if datacenter
+requests get blocked. You can also fetch directly without a proxy with
+`--no-proxy`. Direct requests may be blocked or rate-limited.
 
 ## Usage
 

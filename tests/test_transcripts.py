@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from requests.exceptions import ProxyError
+
 from lapd_shootings.storage import read_json
 from lapd_shootings.transcripts import fetch_transcripts
 
@@ -15,6 +17,14 @@ class FakeClient:
 
     def fetch(self, video_id: str) -> list[FakeTranscript]:
         self.requests.append(video_id)
+        return [FakeTranscript(f"Transcript for {video_id}")]
+
+
+class FlakyClient(FakeClient):
+    def fetch(self, video_id: str) -> list[FakeTranscript]:
+        self.requests.append(video_id)
+        if len(self.requests) == 1:
+            raise ProxyError("proxy reset")
         return [FakeTranscript(f"Transcript for {video_id}")]
 
 
@@ -44,3 +54,29 @@ def test_fetch_transcripts_resumes_and_persists_cache(tmp_path: Path) -> None:
     assert result["new"]["status"] == "fetched"
     assert result["new"]["text"] == "Transcript for new"
     assert read_json(cache_path, {}) == result
+
+
+def test_fetch_transcripts_defers_network_failures_until_next_command(
+    tmp_path: Path,
+) -> None:
+    cache_path = tmp_path / "transcripts.json"
+    client = FlakyClient()
+    sleeps: list[float] = []
+
+    result = fetch_transcripts(
+        ["video"],
+        {},
+        str(cache_path),
+        client=client,  # type: ignore[arg-type]
+        passes=2,
+        batch_size=1,
+        sleep_seconds=0,
+        retry_delay=2,
+        sleep=sleeps.append,
+    )
+
+    assert client.requests == ["video"]
+    assert result["video"]["status"] == "retryable"
+    assert result["video"]["error"] == "ProxyError"
+    assert result["video"]["attempts"] == 1
+    assert sleeps == []
